@@ -39,8 +39,8 @@ h1{margin:0;text-align:center;font-size:clamp(20px,6vw,28px);letter-spacing:.04e
   background:repeating-conic-gradient(rgba(255,255,255,.07) 0 25%,rgba(0,0,0,.18) 0 50%) 0 0/25% 25%;
   box-shadow:inset 0 0 0 2px rgba(255,255,255,.12),0 10px 30px rgba(0,0,0,.4)}
 #fx{position:absolute;inset:0;pointer-events:none;overflow:visible}
-.gem{position:absolute;left:0;top:0;width:12.5%;height:12.5%;transition:transform .28s cubic-bezier(.35,.1,.35,1.15)}
-.g{width:100%;height:100%;padding:7%;transition:transform .2s,opacity .2s,filter .2s}
+.gem{position:absolute;left:0;top:0;width:12.5%;height:12.5%;transition:transform .17s cubic-bezier(.35,.1,.35,1.15)}
+.g{width:100%;height:100%;padding:7%;transition:transform .14s,opacity .14s,filter .14s}
 .g svg{width:100%;height:100%;display:block;filter:drop-shadow(0 2px 2px rgba(0,0,0,.35))}
 .sel .g{transform:scale(1.15);filter:drop-shadow(0 0 6px #fff);animation:pulse .8s infinite alternate}
 .hint .g{animation:wiggle .6s ease-in-out infinite}
@@ -248,7 +248,7 @@ async function cascade(preset,swapPos){
     booms.forEach(k=>fx('boom',k));
     for(const k of clear) els.get(at(k).id).classList.add('pop');
     updateHUD();
-    await wait(230);
+    await wait(150);
     for(const k of clear) board[k/N|0][k%N]=null;
     for(const cr of creations){
       const g={id:nextId++,color:cr.color,special:cr.special};
@@ -256,9 +256,9 @@ async function cascade(preset,swapPos){
       makeEl(g,cr.k/N|0,cr.k%N).classList.add('spawn');
     }
     sync();
-    if(creations.length) await wait(150);
+    if(creations.length) await wait(90);
     gravity();
-    await wait(330);
+    await wait(190);
     swapPos=null;
   }
 }
@@ -286,14 +286,14 @@ async function shuffle(){
 async function trySwap(a,b){
   if(busy) return;
   busy=true;stopHint();select(null);
-  swapK(a,b);sync();play('swap');await wait(200);
+  swapK(a,b);sync();play('swap');await wait(130);
   const ga=at(b),gb=at(a);
   let preset=null;
   if(ga.special===2&&gb.special===2) preset=[...Array(N*N).keys()];
   else if(ga.special===2){ga.target=gb.color;preset=[b]}
   else if(gb.special===2){gb.target=ga.color;preset=[a]}
   if(!preset&&!findRuns().length){
-    swapK(a,b);sync();play('bad');await wait(200);
+    swapK(a,b);sync();play('bad');await wait(130);
     busy=false;armHint();return;
   }
   await cascade(preset,[a,b]);
