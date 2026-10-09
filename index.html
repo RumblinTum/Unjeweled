@@ -1,0 +1,446 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1,maximum-scale=1,user-scalable=no,viewport-fit=cover">
+<meta name="theme-color" content="#1b1035">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+<meta name="apple-mobile-web-app-title" content="Unjeweled">
+<title>Unjeweled</title>
+<link rel="manifest" href="manifest.json">
+<link rel="icon" href="icon.svg" type="image/svg+xml">
+<link rel="apple-touch-icon" href="icon-180.png">
+<style>
+:root{--hue:265}
+*{box-sizing:border-box}
+html,body{margin:0;height:100%}
+body{
+  background:radial-gradient(ellipse at top,hsl(var(--hue) 55% 32%),hsl(var(--hue) 50% 9%) 75%) fixed,#120a24;
+  color:#fff;font-family:-apple-system,system-ui,"Segoe UI",Roboto,sans-serif;
+  display:flex;flex-direction:column;align-items:center;
+  padding:max(10px,env(safe-area-inset-top)) 8px max(10px,env(safe-area-inset-bottom));
+  user-select:none;-webkit-user-select:none;-webkit-touch-callout:none;
+  -webkit-tap-highlight-color:transparent;touch-action:manipulation;overscroll-behavior:none;
+  transition:background 1s;
+}
+#app{width:min(calc(100vw - 16px),calc(100dvh - 230px),520px);display:flex;flex-direction:column;gap:10px;margin:auto 0}
+h1{margin:0;text-align:center;font-size:clamp(20px,6vw,28px);letter-spacing:.04em;
+  background:linear-gradient(90deg,#ffd6e7,#fff3b0,#b9fbc0,#a3c4f3,#e4c1f9);-webkit-background-clip:text;background-clip:text;color:transparent}
+.stats{display:grid;grid-template-columns:1fr 1.4fr 1fr;gap:8px}
+.stat{background:rgba(255,255,255,.08);border-radius:12px;padding:6px 8px;text-align:center}
+.stat small{display:block;font-size:11px;opacity:.7;text-transform:uppercase;letter-spacing:.08em}
+.stat b{font-size:clamp(16px,5vw,22px);font-variant-numeric:tabular-nums}
+.bar{height:10px;border-radius:6px;background:rgba(255,255,255,.12);overflow:hidden}
+.bar i{display:block;height:100%;width:0;border-radius:6px;background:linear-gradient(90deg,#ffd43b,#ff6b9d);transition:width .4s}
+#wrap{position:relative;width:100%;aspect-ratio:1}
+#board{position:absolute;inset:0;overflow:hidden;border-radius:14px;touch-action:none;
+  background:repeating-conic-gradient(rgba(255,255,255,.07) 0 25%,rgba(0,0,0,.18) 0 50%) 0 0/25% 25%;
+  box-shadow:inset 0 0 0 2px rgba(255,255,255,.12),0 10px 30px rgba(0,0,0,.4)}
+#fx{position:absolute;inset:0;pointer-events:none;overflow:visible}
+.gem{position:absolute;left:0;top:0;width:12.5%;height:12.5%;transition:transform .28s cubic-bezier(.35,.1,.35,1.15)}
+.g{width:100%;height:100%;padding:7%;transition:transform .2s,opacity .2s,filter .2s}
+.g svg{width:100%;height:100%;display:block;filter:drop-shadow(0 2px 2px rgba(0,0,0,.35))}
+.sel .g{transform:scale(1.15);filter:drop-shadow(0 0 6px #fff);animation:pulse .8s infinite alternate}
+.hint .g{animation:wiggle .6s ease-in-out infinite}
+.pop .g{transform:scale(0) rotate(40deg);opacity:0}
+.spawn .g{animation:popin .35s cubic-bezier(.3,1.6,.5,1)}
+.flame .g{animation:flame 1s ease-in-out infinite alternate}
+.cube{width:100%;height:100%;border-radius:24%;background:conic-gradient(#ff6b6b,#ffd43b,#69db7c,#4dabf7,#da77f2,#ff6b6b);
+  box-shadow:0 0 10px #fff,inset 0 0 8px rgba(255,255,255,.9);animation:spin 2.5s linear infinite}
+@keyframes pulse{to{transform:scale(1.05)}}
+@keyframes wiggle{0%,100%{transform:rotate(0)}25%{transform:rotate(-14deg) scale(1.08)}75%{transform:rotate(14deg) scale(1.08)}}
+@keyframes popin{from{transform:scale(0)}}
+@keyframes flame{from{filter:drop-shadow(0 0 3px #ff922b)}to{filter:drop-shadow(0 0 10px #ffd43b) brightness(1.2)}}
+@keyframes spin{to{transform:rotate(360deg)}}
+.float{position:absolute;transform:translate(-50%,-50%);font-weight:800;font-size:clamp(16px,5vw,22px);
+  text-shadow:0 2px 4px rgba(0,0,0,.6);animation:rise .9s ease-out forwards;white-space:nowrap}
+@keyframes rise{to{transform:translate(-50%,-160%);opacity:0}}
+.toast{position:absolute;left:50%;top:45%;transform:translate(-50%,-50%);font-size:clamp(22px,8vw,40px);font-weight:900;
+  white-space:nowrap;text-shadow:0 3px 10px rgba(0,0,0,.7);animation:toast 1.4s ease-out forwards;color:#fff3b0}
+.toast.small{font-size:clamp(16px,5.5vw,26px);top:12%;color:#ffd6e7}
+@keyframes toast{0%{opacity:0;transform:translate(-50%,-50%) scale(.6)}15%{opacity:1;transform:translate(-50%,-50%) scale(1.08)}80%{opacity:1}100%{opacity:0;transform:translate(-50%,-90%)}}
+.boom{position:absolute;width:37.5%;height:37.5%;transform:translate(-50%,-50%);border-radius:50%;
+  background:radial-gradient(circle,#fff 0,#ffd43b 30%,rgba(255,120,0,.5) 55%,transparent 70%);animation:boom .45s ease-out forwards}
+@keyframes boom{from{transform:translate(-50%,-50%) scale(.2)}to{transform:translate(-50%,-50%) scale(1.3);opacity:0}}
+.btns{display:grid;grid-template-columns:repeat(4,1fr);gap:8px}
+button{font:inherit;color:#fff;background:rgba(255,255,255,.12);border:0;border-radius:12px;padding:10px 4px;font-size:15px;font-weight:600}
+button:active{background:rgba(255,255,255,.25)}
+#menu{position:fixed;inset:0;background:rgba(0,0,0,.6);display:none;align-items:center;justify-content:center;padding:16px;z-index:10}
+#menu.open{display:flex}
+#menu .card{background:hsl(var(--hue) 40% 18%);border-radius:16px;padding:18px;width:min(340px,100%);display:flex;flex-direction:column;gap:10px}
+#menu h2{margin:0 0 4px;font-size:20px;text-align:center}
+#menu p{margin:0;font-size:13px;opacity:.75;text-align:center}
+</style>
+</head>
+<body>
+<svg width="0" height="0" style="position:absolute" aria-hidden="true"><defs id="defs"></defs></svg>
+<div id="app">
+  <h1>Unjeweled</h1>
+  <div class="stats">
+    <div class="stat"><small>Level</small><b id="level">1</b></div>
+    <div class="stat"><small>Score</small><b id="score">0</b></div>
+    <div class="stat"><small>Best</small><b id="best">0</b></div>
+  </div>
+  <div class="bar"><i id="prog"></i></div>
+  <div id="wrap"><div id="board"></div><div id="fx"></div></div>
+  <div class="btns">
+    <button id="hintBtn">💡 Hint</button>
+    <button id="shuffleBtn">🔀 Mix</button>
+    <button id="soundBtn">🔊</button>
+    <button id="menuBtn">☰ Menu</button>
+  </div>
+</div>
+<div id="menu"><div class="card">
+  <h2>Menu</h2>
+  <p>Your game saves automatically after every move.</p>
+  <button id="copyBtn">📋 Copy backup code</button>
+  <button id="restoreBtn">📥 Restore from backup code</button>
+  <button id="newBtn">✨ Start a new game</button>
+  <button id="closeBtn">Close</button>
+</div></div>
+<script>
+const $=s=>document.querySelector(s);
+const N=8, KEY='gemGarden.v1';
+const boardEl=$('#board'), fxEl=$('#fx');
+const wait=ms=>new Promise(r=>setTimeout(r,ms));
+// [light, mid, dark, shape, highlight x, highlight y]
+const GEMS=[
+  ['#ff8a95','#e01e37','#7a0019','<rect x="12" y="12" width="76" height="76" rx="16"/>',34,30],
+  ['#ffc078','#f76707','#8a3200','<polygon points="50,5 89,27.5 89,72.5 50,95 11,72.5 11,27.5"/>',36,30],
+  ['#fff59d','#fcc419','#8a6400','<polygon points="50,4 93,50 50,96 7,50"/>',42,32],
+  ['#a6f4b5','#2fb344','#0b5e1c','<polygon points="31,7 69,7 93,31 93,69 69,93 31,93 7,69 7,31"/>',34,28],
+  ['#a5d8ff','#228be6','#0b3d7a','<circle cx="50" cy="50" r="43"/>',34,30],
+  ['#e5b8ff','#9c36b5','#4a0b5e','<polygon points="50,8 95,88 5,88"/>',44,50],
+  ['#ffffff','#c5cae9','#5c6390','<polygon points="50,5 94,38 77,93 23,93 6,38"/>',38,34],
+];
+const COLORS=GEMS.length;
+$('#defs').innerHTML=GEMS.map(([a,b,c],i)=>
+  `<radialGradient id="g${i}" cx=".35" cy=".3" r=".85"><stop offset="0" stop-color="${a}"/><stop offset=".55" stop-color="${b}"/><stop offset="1" stop-color="${c}"/></radialGradient>`).join('');
+
+let board, nextId=1, score=0, level=1, levelStart=0, best=0, soundOn=true;
+let busy=false, selected=null, hintTimer=null, hinted=[];
+const els=new Map();
+
+const at=k=>board[k/N|0][k%N];
+const randGem=()=>({id:nextId++,color:Math.random()*COLORS|0,special:0});
+const colorAt=(r,c)=>{const g=board[r][c];return g&&g.special!==2?g.color:-1};
+
+function gemHTML(g){
+  if(g.special===2) return '<div class="g"><div class="cube"></div></div>';
+  const [,,dark,shape,hx,hy]=GEMS[g.color];
+  return `<div class="g"><svg viewBox="0 0 100 100"><g fill="url(#g${g.color})" stroke="${dark}" stroke-width="3" stroke-linejoin="round">${shape}</g>`+
+    `<g fill="#fff" opacity=".2" transform="translate(50 52) scale(.5) translate(-50 -50)">${shape}</g>`+
+    `<ellipse cx="${hx}" cy="${hy}" rx="10" ry="5.5" fill="#fff" opacity=".65" transform="rotate(-30 ${hx} ${hy})"/></svg></div>`;
+}
+function setPos(el,r,c){el.style.transform=`translate(${c*100}%,${r*100}%)`}
+function makeEl(g,r,c){
+  const el=document.createElement('div');
+  el.className='gem'+(g.special===1?' flame':'');
+  el.innerHTML=gemHTML(g);
+  setPos(el,r,c);
+  boardEl.appendChild(el);
+  els.set(g.id,el);
+  return el;
+}
+function sync(){
+  const alive=new Set();
+  for(let r=0;r<N;r++)for(let c=0;c<N;c++){
+    const g=board[r][c]; if(!g) continue;
+    alive.add(g.id);
+    const el=els.get(g.id);
+    if(el) setPos(el,r,c); else makeEl(g,r,c);
+  }
+  for(const [id,el] of els) if(!alive.has(id)){el.remove();els.delete(id)}
+}
+
+function findRuns(){
+  const runs=[];
+  for(let r=0;r<N;r++){let c=0;while(c<N){const col=colorAt(r,c);let e=c+1;
+    if(col>=0) while(e<N&&colorAt(r,e)===col) e++;
+    if(e-c>=3) runs.push({color:col,cells:Array.from({length:e-c},(_,i)=>r*N+c+i)});
+    c=e;}}
+  for(let c=0;c<N;c++){let r=0;while(r<N){const col=colorAt(r,c);let e=r+1;
+    if(col>=0) while(e<N&&colorAt(e,c)===col) e++;
+    if(e-r>=3) runs.push({color:col,cells:Array.from({length:e-r},(_,i)=>(r+i)*N+c)});
+    r=e;}}
+  return runs;
+}
+function swapK(a,b){const ra=a/N|0,ca=a%N,rb=b/N|0,cb=b%N;[board[ra][ca],board[rb][cb]]=[board[rb][cb],board[ra][ca]]}
+function findMove(){
+  for(let k=0;k<N*N;k++) for(const d of [1,N]){
+    if(d===1&&k%N===N-1) continue;
+    const k2=k+d; if(k2>=N*N) continue;
+    if(at(k).special===2||at(k2).special===2) return [k,k2];
+    swapK(k,k2); const ok=findRuns().length>0; swapK(k,k2);
+    if(ok) return [k,k2];
+  }
+  return null;
+}
+function newBoard(){
+  do{
+    board=[];
+    for(let r=0;r<N;r++){const row=[];board.push(row);
+      for(let c=0;c<N;c++){let g;
+        do g=randGem(); while((c>=2&&row[c-1].color===g.color&&row[c-2].color===g.color)||(r>=2&&board[r-1][c].color===g.color&&board[r-2][c].color===g.color));
+        row.push(g);}}
+  }while(!findMove());
+}
+
+function cellCenter(k){return [((k%N)+.5)/N*100,((k/N|0)+.5)/N*100]}
+function fx(cls,k,text){
+  const d=document.createElement('div');d.className=cls;
+  const [x,y]=cellCenter(k);d.style.left=x+'%';d.style.top=y+'%';
+  if(text) d.textContent=text;
+  fxEl.appendChild(d);d.addEventListener('animationend',()=>d.remove());
+}
+function toast(text,small){
+  const d=document.createElement('div');d.className='toast'+(small?' small':'');d.textContent=text;
+  fxEl.appendChild(d);d.addEventListener('animationend',()=>d.remove());
+}
+
+async function cascade(preset,swapPos){
+  let combo=0;
+  while(true){
+    const clear=new Set(preset||[]);preset=null;
+    const runs=findRuns();
+    if(!runs.length&&!clear.size) break;
+    combo++;
+    const hits=new Map();
+    for(const run of runs) for(const k of run.cells){clear.add(k);hits.set(k,(hits.get(k)||0)+1)}
+    // 4 in a row (or L/T shape) makes a flame gem, 5 in a row makes a rainbow cube
+    const creations=[],used=new Set();
+    for(const run of runs){
+      const len=run.cells.length,inter=run.cells.find(k=>hits.get(k)>1);
+      const special=len>=5?2:(len===4||inter!==undefined)?1:0;
+      if(!special) continue;
+      let k=swapPos?run.cells.find(k=>swapPos.includes(k)):undefined;
+      if(k===undefined) k=inter;
+      if(k===undefined) k=run.cells[len>>1];
+      if(used.has(k)) continue;
+      used.add(k);
+      creations.push({k,special,color:special===2?-1:run.color});
+    }
+    const q=[...clear],booms=[];
+    for(let i=0;i<q.length;i++){
+      const g=at(q[i]);
+      if(!g||g.done) continue;
+      const add=k2=>{if(!clear.has(k2)){clear.add(k2);q.push(k2)}};
+      if(g.special===1){
+        g.done=true;booms.push(q[i]);
+        const r=q[i]/N|0,c=q[i]%N;
+        for(let dr=-1;dr<=1;dr++)for(let dc=-1;dc<=1;dc++){const rr=r+dr,cc=c+dc;if(rr>=0&&rr<N&&cc>=0&&cc<N) add(rr*N+cc)}
+      }else if(g.special===2){
+        g.done=true;
+        let col=g.target;
+        if(col===undefined){const left=board.flat().filter((x,k)=>!clear.has(k)&&x.special!==2);col=left.length?left[Math.random()*left.length|0].color:0}
+        for(let k2=0;k2<N*N;k2++) if(at(k2).color===col) add(k2);
+      }
+    }
+    const pts=clear.size*10*combo+creations.length*50;
+    score+=pts;
+    const ks=[...clear],mid=ks.reduce((a,k)=>a+(k/N|0),0)/ks.length,midc=ks.reduce((a,k)=>a+k%N,0)/ks.length;
+    fx('float',Math.round(mid)*N+Math.round(midc),'+'+pts);
+    if(combo>1) toast(combo>=4?`Amazing x${combo}!`:`Combo x${combo}!`,true);
+    play('match',combo);
+    if(booms.length) play('boom');
+    booms.forEach(k=>fx('boom',k));
+    for(const k of clear) els.get(at(k).id).classList.add('pop');
+    updateHUD();
+    await wait(230);
+    for(const k of clear) board[k/N|0][k%N]=null;
+    for(const cr of creations){
+      const g={id:nextId++,color:cr.color,special:cr.special};
+      board[cr.k/N|0][cr.k%N]=g;
+      makeEl(g,cr.k/N|0,cr.k%N).classList.add('spawn');
+    }
+    sync();
+    if(creations.length) await wait(150);
+    gravity();
+    await wait(330);
+    swapPos=null;
+  }
+}
+function gravity(){
+  for(let c=0;c<N;c++){
+    let w=N-1;
+    for(let r=N-1;r>=0;r--){const g=board[r][c];if(g){board[r][c]=null;board[w][c]=g;w--}}
+    const missing=w+1;
+    for(let r=w;r>=0;r--){const g=randGem();board[r][c]=g;makeEl(g,r-missing,c)}
+  }
+  boardEl.offsetWidth; // flush layout so new gems animate in from above
+  sync();
+}
+async function shuffle(){
+  const gems=board.flat();
+  for(let t=0;t<200;t++){
+    for(let i=gems.length-1;i>0;i--){const j=Math.random()*(i+1)|0;[gems[i],gems[j]]=[gems[j],gems[i]]}
+    board=Array.from({length:N},(_,r)=>gems.slice(r*N,r*N+N));
+    if(!findRuns().length&&findMove()) break;
+  }
+  if(findRuns().length||!findMove()) newBoard();
+  sync();play('shuffle');await wait(400);
+}
+
+async function trySwap(a,b){
+  if(busy) return;
+  busy=true;stopHint();select(null);
+  swapK(a,b);sync();play('swap');await wait(200);
+  const ga=at(b),gb=at(a);
+  let preset=null;
+  if(ga.special===2&&gb.special===2) preset=[...Array(N*N).keys()];
+  else if(ga.special===2){ga.target=gb.color;preset=[b]}
+  else if(gb.special===2){gb.target=ga.color;preset=[a]}
+  if(!preset&&!findRuns().length){
+    swapK(a,b);sync();play('bad');await wait(200);
+    busy=false;armHint();return;
+  }
+  await cascade(preset,[a,b]);
+  await afterMove();
+  busy=false;
+}
+async function afterMove(){
+  checkLevel();
+  if(!findMove()){toast('No moves — mixing!',true);await wait(700);await shuffle()}
+  save();armHint();
+}
+
+const need=l=>1000+(l-1)*500;
+function checkLevel(){
+  let up=false;
+  while(score-levelStart>=need(level)){levelStart+=need(level);level++;up=true}
+  if(up){toast(`Level ${level}!`);play('level');setHue()}
+  updateHUD();
+}
+function setHue(){document.documentElement.style.setProperty('--hue',(265+(level-1)*47)%360)}
+function updateHUD(){
+  best=Math.max(best,score);
+  $('#level').textContent=level;
+  $('#score').textContent=score.toLocaleString();
+  $('#best').textContent=best.toLocaleString();
+  $('#prog').style.width=Math.min(100,(score-levelStart)/need(level)*100)+'%';
+  $('#soundBtn').textContent=soundOn?'🔊':'🔇';
+}
+
+function stateJSON(){return JSON.stringify({v:1,board:board.map(r=>r.map(g=>[g.color,g.special])),score,level,levelStart,best,soundOn})}
+function applyState(s){
+  if(!s||s.v!==1||!Array.isArray(s.board)||s.board.length!==N) return false;
+  board=s.board.map(row=>row.map(([color,special])=>({id:nextId++,color,special})));
+  ({score,level,levelStart,best}=s);soundOn=s.soundOn!==false;
+  return true;
+}
+function save(){
+  try{localStorage.setItem(KEY,stateJSON())}catch(e){console.warn('save failed',e)}
+}
+function load(){
+  let s=null;
+  try{s=JSON.parse(localStorage.getItem(KEY))}catch(e){console.warn('load failed',e)}
+  if(!applyState(s)) newBoard();
+}
+
+function showHint(){
+  stopHint();
+  const m=findMove();if(!m) return;
+  hinted=m.map(k=>els.get(at(k).id));
+  hinted.forEach(e=>e.classList.add('hint'));
+}
+function stopHint(){clearTimeout(hintTimer);hinted.forEach(e=>e.classList.remove('hint'));hinted=[]}
+function armHint(){clearTimeout(hintTimer);hintTimer=setTimeout(showHint,15000)}
+
+let ac=null;
+function unlockAudio(){
+  if(!soundOn) return;
+  ac=ac||new (window.AudioContext||window.webkitAudioContext)();
+  if(ac.state!=='running') ac.resume();
+}
+function play(type,combo=1){
+  if(!soundOn||!ac) return;
+  const t=ac.currentTime;
+  const tone=(f,d,delay=0,wave='sine',vol=.12)=>{
+    const o=ac.createOscillator(),g=ac.createGain();
+    o.type=wave;o.frequency.setValueAtTime(f,t+delay);
+    g.gain.setValueAtTime(vol,t+delay);g.gain.exponentialRampToValueAtTime(.001,t+delay+d);
+    o.connect(g).connect(ac.destination);o.start(t+delay);o.stop(t+delay+d);
+  };
+  if(type==='swap') tone(520,.08,0,'triangle',.07);
+  else if(type==='bad') tone(170,.15,0,'square',.04);
+  else if(type==='match'){const f=440*Math.pow(2,Math.min(combo-1,8)*2/12);tone(f,.18);tone(f*1.5,.22,.05)}
+  else if(type==='boom') tone(90,.35,0,'sawtooth',.08);
+  else if(type==='level') [523,659,784,1047].forEach((f,i)=>tone(f,.3,i*.1,'triangle',.1));
+  else if(type==='shuffle'){tone(330,.1);tone(440,.1,.08);tone(550,.1,.16)}
+}
+
+function select(k){
+  if(selected!==null){const g=at(selected);if(g) els.get(g.id)?.classList.remove('sel')}
+  selected=k;
+  if(k!==null) els.get(at(k).id).classList.add('sel');
+}
+function tap(k){
+  if(busy) return;
+  if(selected===null) return select(k);
+  if(selected===k) return select(null);
+  const d=Math.abs(selected-k);
+  if((d===1&&(selected/N|0)===(k/N|0))||d===N) trySwap(selected,k);
+  else select(k);
+}
+function keyFromPoint(e){
+  const r=boardEl.getBoundingClientRect();
+  const c=Math.floor((e.clientX-r.left)/r.width*N),row=Math.floor((e.clientY-r.top)/r.height*N);
+  return c>=0&&c<N&&row>=0&&row<N?row*N+c:null;
+}
+let drag=null;
+boardEl.addEventListener('pointerdown',e=>{
+  unlockAudio();
+  if(busy) return;
+  const k=keyFromPoint(e);if(k===null) return;
+  drag={k,x:e.clientX,y:e.clientY,moved:false};
+  boardEl.setPointerCapture(e.pointerId);
+});
+boardEl.addEventListener('pointermove',e=>{
+  if(!drag||drag.moved) return;
+  const dx=e.clientX-drag.x,dy=e.clientY-drag.y,cs=boardEl.clientWidth/N;
+  if(Math.max(Math.abs(dx),Math.abs(dy))<cs*.3) return;
+  drag.moved=true;
+  const r=drag.k/N|0,c=drag.k%N;
+  const [rr,cc]=Math.abs(dx)>Math.abs(dy)?[r,c+Math.sign(dx)]:[r+Math.sign(dy),c];
+  if(rr>=0&&rr<N&&cc>=0&&cc<N) trySwap(drag.k,rr*N+cc);
+});
+boardEl.addEventListener('pointerup',()=>{if(drag&&!drag.moved) tap(drag.k);drag=null});
+boardEl.addEventListener('pointercancel',()=>{drag=null});
+
+$('#hintBtn').onclick=()=>{unlockAudio();if(!busy) showHint()};
+$('#shuffleBtn').onclick=async()=>{
+  unlockAudio();if(busy) return;
+  busy=true;stopHint();select(null);await shuffle();save();armHint();busy=false;
+};
+$('#soundBtn').onclick=()=>{soundOn=!soundOn;unlockAudio();updateHUD();save()};
+$('#menuBtn').onclick=()=>$('#menu').classList.add('open');
+$('#closeBtn').onclick=()=>$('#menu').classList.remove('open');
+$('#copyBtn').onclick=async()=>{
+  const code=btoa(stateJSON());
+  try{await navigator.clipboard.writeText(code);alert('Backup code copied! Paste it somewhere safe (like Notes).')}
+  catch(e){prompt('Copy this backup code and keep it somewhere safe:',code)}
+};
+$('#restoreBtn').onclick=()=>{
+  const code=prompt('Paste your backup code:');if(!code) return;
+  let s=null;
+  try{s=JSON.parse(atob(code.trim()))}catch(e){console.warn('bad backup code',e)}
+  if(busy||!applyState(s)) return alert("That code didn't work.");
+  stopHint();selected=null;sync();setHue();updateHUD();save();armHint();
+  $('#menu').classList.remove('open');
+};
+$('#newBtn').onclick=()=>{
+  if(busy||!confirm('Start over from Level 1? Your best score is kept.')) return;
+  score=0;level=1;levelStart=0;stopHint();selected=null;newBoard();sync();setHue();updateHUD();save();armHint();
+  $('#menu').classList.remove('open');
+};
+
+load();
+sync();setHue();updateHUD();
+if(findRuns().length||!findMove()) shuffle().then(save); else save();
+armHint();
+navigator.storage?.persist?.();
+</script>
+</body>
+</html>
