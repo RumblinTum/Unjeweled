@@ -183,6 +183,37 @@ body.saga .no-saga{display:none}
 .dial{position:relative;width:220px;height:220px;margin:6px auto;border-radius:50%;border:6px solid rgba(255,255,255,.25)}
 .dial::after{content:'';position:absolute;left:50%;top:50%;width:22px;height:22px;margin:-11px;border-radius:50%;background:#fff}
 #needle{position:absolute;left:50%;top:4%;width:6px;height:46%;margin-left:-3px;background:#fff;border-radius:3px;transform-origin:50% 100%;box-shadow:0 0 6px #000}
+/* Candy Saga look: glossy candies, rounded tiles, squash-and-stretch */
+#flash{position:absolute;inset:0;border-radius:14px;pointer-events:none;z-index:4;opacity:0}
+#flash.on{animation:flash .35s ease-out}
+@keyframes flash{0%{opacity:var(--a,.3)}100%{opacity:0}}
+body.saga #board{background:rgba(25,8,40,.45)}
+body.saga .cell.hole{background:transparent}
+.cell.tile{transform:scale(.92);border-radius:22%;background:linear-gradient(160deg,rgba(255,255,255,.17),rgba(255,255,255,.05));box-shadow:inset 0 2px 1px rgba(255,255,255,.2),inset 0 -3px 3px rgba(0,0,0,.25)}
+.cell.tile.j1{background:linear-gradient(160deg,rgba(255,170,220,.6),rgba(255,90,170,.35));box-shadow:inset 0 2px 2px rgba(255,255,255,.45),inset 0 -3px 3px rgba(150,0,80,.3)}
+.cell.tile.j2{background:linear-gradient(160deg,rgba(255,120,200,.85),rgba(220,40,140,.6));box-shadow:inset 0 2px 2px rgba(255,255,255,.5),inset 0 -3px 3px rgba(120,0,60,.4),0 0 0 2px rgba(255,200,230,.5)}
+.cell.crack{animation:crack .3s ease-out}
+@keyframes crack{35%{transform:scale(1.04);filter:brightness(2)}}
+body.saga .gem{transition:transform .26s cubic-bezier(.5,0,.85,.45)}
+body.saga #board.swapping .gem{transition:transform .18s cubic-bezier(.3,1.45,.55,1)}
+body.saga .noanim .gem{transition:none}
+body.saga .slowfall .gem{transition-duration:.55s}
+body.saga .g{padding:4%}
+body.saga .dirtg .g{padding:2%}
+body.saga .g>svg{filter:drop-shadow(0 3px 2px rgba(0,0,0,.35))}
+body.saga .cbomb .g{padding:0}
+body.saga .cbomb .g>svg{animation:spin 9s linear infinite}
+body.saga .falling .g{transform:rotate(var(--rot,0deg))}
+body.saga .land .g{animation:land .3s ease-out}
+body.saga .sqh .g{animation:sqh .2s ease-out}
+body.saga .sqv .g{animation:sqv .2s ease-out}
+body.saga .pop .g{transform:none;opacity:1;animation:candyPop .24s ease-in var(--d,0ms) forwards}
+@keyframes land{0%{transform:scale(1.14,.82) translateY(8%)}45%{transform:scale(.95,1.06) translateY(-3%)}100%{transform:none}}
+@keyframes sqh{45%{transform:scale(1.16,.86)}}
+@keyframes sqv{45%{transform:scale(.86,1.16)}}
+@keyframes candyPop{0%{transform:scale(1)}30%{transform:scale(1.2);filter:brightness(2.4) saturate(.5)}100%{transform:scale(.1);opacity:0;filter:brightness(3)}}
+body.saga .float{animation:riseB 1.05s ease-out forwards}
+@keyframes riseB{0%{transform:translate(-50%,-50%) scale(.4);opacity:0}18%{transform:translate(-50%,-50%) scale(1.25);opacity:1}32%{transform:translate(-50%,-50%) scale(1)}100%{transform:translate(-50%,-170%);opacity:0}}
 </style>
 </head>
 <body>
@@ -203,6 +234,7 @@ body.saga .no-saga{display:none}
     <div id="board"><div id="cells"></div><div id="dark"></div><div id="ice"></div></div>
     <canvas id="cv"></canvas>
     <div id="fx"></div>
+    <div id="flash"></div>
     <div id="replayTag">REPLAY</div>
     <button id="replayBtn">▶ Instant Replay</button>
   </div>
@@ -376,6 +408,89 @@ const KINDS=['score','jelly','order','ing','frost','choc','lic','mixed'];
 $('#defs').innerHTML=GEMS.map(([a,b,c],i)=>
   `<radialGradient id="g${i}" cx=".35" cy=".3" r=".85"><stop offset="0" stop-color="${a}"/><stop offset=".55" stop-color="${b}"/><stop offset="1" stop-color="${c}"/></radialGradient>`).join('');
 
+// ---------- candy art (Candy Saga) ----------
+// [light, mid, dark]; Saga deals the first 6, pink only exists on older saved boards
+const CANDY=[
+  ['#ffb3bd','#f0283f','#8f0b1f'],
+  ['#ffd29a','#ff8a1c','#a84300'],
+  ['#fff6a8','#ffd21f','#b88a00'],
+  ['#c4f7a2','#3fc23a','#14701a'],
+  ['#b5e2ff','#2b8ef0','#0c3f8f'],
+  ['#e9c2ff','#a53ee0','#56127f'],
+  ['#ffe3f1','#ff9fcf','#c2437f'],
+];
+const SAGA_COLORS=6;
+const poly=(f,n=72)=>'M'+Array.from({length:n},(_,i)=>f(i/n*Math.PI*2).map(v=>v.toFixed(1)).join(' ')).join('L')+'Z';
+const polar=fn=>t=>{const r=fn(t);return [50+r*Math.cos(t),50+r*Math.sin(t)]};
+const CANDY_SHAPES=[
+  poly(t=>{const x=44*Math.cos(t),y=28*Math.sin(t),c=Math.cos(-.45),s=Math.sin(-.45);return [50+x*c-y*s,50+x*s+y*c]}), // jelly bean
+  poly(polar(t=>40*(1+.07*Math.cos(6*t)))),                                                                // lozenge
+  poly(t=>[50+40*Math.sin(t)*Math.sin(t/2),52-44*Math.cos(t)]),                                            // lemon drop
+  poly(polar(t=>41/Math.pow(Math.abs(Math.cos(t))**4+Math.abs(Math.sin(t))**4,.25))),                      // rounded square
+  poly(polar(()=>42)),                                                                                     // swirl disc
+  poly(polar(t=>36+8*Math.cos(5*(t+Math.PI/2)))),                                                          // flower
+  poly(t=>{const s=Math.sin(t);return [50+41.6*s*s*s,46-2.6*(13*Math.cos(t)-5*Math.cos(2*t)-2*Math.cos(3*t)-Math.cos(4*t))]}), // heart
+];
+const CANDY_DECO=[
+  ()=>'<path d="M28 62Q50 72 74 52" fill="none" stroke="#fff" stroke-opacity=".25" stroke-width="4" stroke-linecap="round"/>',
+  ()=>`<path d="${poly(polar(t=>27*(1+.07*Math.cos(6*t))))}" fill="none" stroke="#fff" stroke-opacity=".25" stroke-width="3"/>`,
+  ()=>'',
+  ()=>'<rect x="27" y="27" width="46" height="46" rx="14" fill="none" stroke="#fff" stroke-opacity=".28" stroke-width="3"/>',
+  ()=>'<path d="M50 50m-5 0a5 5 0 1 1 10 0a10 10 0 1 1-20 0a15 15 0 1 1 30 0a20 20 0 1 1-40 0a25 25 0 1 1 50 0" fill="none" stroke="#fff" stroke-opacity=".3" stroke-width="4.5"/>',
+  l=>`<circle cx="50" cy="50" r="11" fill="${l}" opacity=".55"/>`,
+  ()=>'',
+];
+$('#defs').innerHTML+=CANDY.map(([a,b,c],i)=>
+  `<radialGradient id="cg${i}" cx=".36" cy=".3" r=".8"><stop offset="0" stop-color="${a}"/><stop offset=".5" stop-color="${b}"/><stop offset="1" stop-color="${c}"/></radialGradient><clipPath id="cc${i}"><path d="${CANDY_SHAPES[i]}"/></clipPath>`).join('')+
+  '<radialGradient id="cin" cx=".5" cy=".78" r=".55"><stop offset="0" stop-color="#fff" stop-opacity=".35"/><stop offset="1" stop-color="#fff" stop-opacity="0"/></radialGradient>'+
+  '<linearGradient id="spec" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="#fff" stop-opacity=".95"/><stop offset="1" stop-color="#fff" stop-opacity=".1"/></linearGradient>'+
+  '<linearGradient id="stripeG" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="#fff"/><stop offset=".6" stop-color="#fff"/><stop offset="1" stop-color="#d6d6e6"/></linearGradient>'+
+  '<radialGradient id="choc" cx=".35" cy=".3" r=".85"><stop offset="0" stop-color="#9a6238"/><stop offset=".55" stop-color="#4a2914"/><stop offset="1" stop-color="#1f0e05"/></radialGradient>'+
+  '<clipPath id="ccb"><circle cx="50" cy="50" r="46"/></clipPath>';
+// Color bomb: glossy chocolate ball covered in sprinkles
+const CBOMB=(()=>{
+  const R=mulberry32(7),cols=['#ff4d6d','#4dabf7','#ffd43b','#69db7c','#ffffff','#da77f2'];
+  let sp='';
+  for(let i=0;i<34;i++){
+    const a=R()*6.283,r=Math.sqrt(R())*38,x=(50+r*Math.cos(a)).toFixed(1),y=(50+r*Math.sin(a)).toFixed(1);
+    sp+=`<rect x="${(x-4).toFixed(1)}" y="${(y-1.6).toFixed(1)}" width="8" height="3.2" rx="1.6" fill="${cols[i%6]}" transform="rotate(${R()*180|0} ${x} ${y})"/>`;
+  }
+  return `<svg viewBox="0 0 100 100"><circle cx="50" cy="50" r="46" fill="url(#choc)"/><g clip-path="url(#ccb)">${sp}<ellipse cx="34" cy="26" rx="17" ry="9" fill="url(#spec)" transform="rotate(-32 34 26)"/></g><circle cx="50" cy="50" r="46" fill="none" stroke="#b07a4f" stroke-width="2" opacity=".6"/></svg>`;
+})();
+// Crinkled rectangle outline for the wrapper paper
+function crinkle(x0,y0,x1,y1,amp){
+  const pts=[];
+  for(const [ax,ay,bx,by] of [[x0,y0,x1,y0],[x1,y0,x1,y1],[x1,y1,x0,y1],[x0,y1,x0,y0]]){
+    const len=Math.hypot(bx-ax,by-ay),n=Math.round(len/4),nx=(by-ay)/len,ny=-(bx-ax)/len;
+    for(let j=0;j<n;j++){const f=j/n,o=j%2?amp:-amp;pts.push([ax+(bx-ax)*f+nx*o,ay+(by-ay)*f+ny*o])}
+  }
+  return 'M'+pts.map(p=>p[0].toFixed(1)+' '+p[1].toFixed(1)).join('L')+'Z';
+}
+function wrapperSVG(i){
+  const [l,m]=CANDY[i],end='M26 40L8 26L6 34L9 42L6 50L9 58L6 66L8 74L26 60Z';
+  const ends=[end,end.replace(/(\d+)\s(\d+)/g,(_,x,y)=>`${100-x} ${y}`)];
+  return ends.map(d=>`<path d="${d}" fill="${m}" fill-opacity=".9" stroke="${l}" stroke-width="1.5"/>`).join('')+
+    '<path d="M26 40L12 33M26 50L10 50M26 60L12 67M74 40L88 33M74 50L90 50M74 60L88 67" stroke="#fff" stroke-opacity=".45" stroke-width="2" stroke-linecap="round"/>'+
+    `<path d="${crinkle(26,26,74,74,2)}" fill="${m}" fill-opacity=".62" stroke="${l}" stroke-width="2"/>`+
+    '<path d="M31 34L45 30M55 70L69 66M30 58L38 70" stroke="#fff" stroke-opacity=".4" stroke-width="2.2" stroke-linecap="round"/>'+
+    '<ellipse cx="38" cy="33" rx="11" ry="5" fill="url(#spec)" transform="rotate(-25 38 33)"/>';
+}
+const candyCache=new Map();
+function candySVG(g){
+  if(g.special===2) return CBOMB;
+  const key=g.color+'-'+g.special;
+  if(candyCache.has(key)) return candyCache.get(key);
+  const i=g.color,P=CANDY_SHAPES[i],[l]=CANDY[i],sp=g.special,striped=sp===7||sp===8;
+  const stripes=striped?`<g${sp===8?' transform="rotate(90 50 50)"':''}>`+[24,45,66].map(y=>`<rect x="-5" y="${y}" width="110" height="10" rx="5" fill="url(#stripeG)" stroke="rgba(0,0,0,.12)"/>`).join('')+'</g>':'';
+  const core=scale=>`<g transform="translate(50 50) scale(${scale}) translate(-50 -50)"><path d="${P}" fill="url(#cg${i})"/>`+
+    `<g clip-path="url(#cc${i})"><path d="${P}" fill="url(#cin)"/>${CANDY_DECO[i](l)}${stripes}`+
+    `<ellipse cx="33" cy="27" rx="16" ry="8" fill="url(#spec)" transform="rotate(-32 33 27)"/><circle cx="23" cy="45" r="2.6" fill="#fff" opacity=".75"/></g>`+
+    `<path d="${P}" fill="none" stroke="${striped?'#fff':l}" stroke-width="${striped?3.2:2}" stroke-opacity="${striped?.85:.6}"/></g>`;
+  const svg=`<svg viewBox="0 0 100 100">${sp===9?core(.6)+wrapperSVG(i):core(1)}</svg>`;
+  candyCache.set(key,svg);
+  return svg;
+}
+
 let board, nextId=1, score=0, level=1, levelStart=0, extra={}, holes=new Set();
 let mode=null, lastPersistent='classic', slots={}, bests={}, soundOn=true, badges={}, boosts={...DEFAULT_BOOSTS};
 let sagaMeta={unlocked:1,cur:1,stars:{}}, armedTool=null, chocHit=false, failKind='', startPick={bomb:false,sw:false};
@@ -402,7 +517,7 @@ function randGem(){
     const on=board.flat().filter(g=>g&&g.ing).length;
     if(on<2&&on+extra.prog.ing<extra.ingNeed&&rnd()<.08) return {id:nextId++,color:-1,special:0,ing:true};
   }
-  const g={id:nextId++,color:rnd()*COLORS|0,special:0};
+  const g={id:nextId++,color:rnd()*(mode==='saga'?SAGA_COLORS:COLORS)|0,special:0};
   const r=rnd();
   if(mode!=='saga'&&r<.002) g.special=6;
   else if(mode!=='saga'&&r<.006) g.special=5;
@@ -417,7 +532,7 @@ function dirtGem(){
   return g;
 }
 const colorAt=(r,c)=>{const g=board[r][c];return g&&g.special!==2&&!isTile(g)&&!g.ing?g.color:-1};
-const colorOf=g=>g.dirt?'#a0703f':g.block==='frost'?'#ffd6ec':g.block==='choc'?'#8b5a2b':g.block?'#555':g.ing?'#c08a5b':g.special===2?'#ffffff':GEMS[g.color][1];
+const colorOf=g=>g.dirt?'#a0703f':g.block==='frost'?'#ffd6ec':g.block==='choc'?'#8b5a2b':g.block?'#555':g.ing?'#c08a5b':g.special===2?'#ffffff':mode==='saga'?CANDY[g.color][1]:GEMS[g.color][1];
 const menuOpen=()=>!!document.querySelector('.modal.open');
 
 function gemHTML(g){
@@ -425,6 +540,7 @@ function gemHTML(g){
   if(g.block==='frost') return `<div class="g"><div class="blk frost f${Math.min(3,g.hp)}">${g.hp>1?g.hp:''}</div></div>`;
   if(g.block) return `<div class="g"><div class="blk ${g.block}"></div></div>`;
   if(g.ing) return '<div class="g"><div class="ingr">🌰</div></div>';
+  if(mode==='saga') return '<div class="g">'+candySVG(g)+(g.locked?LOCK:'')+(g.bomb!==undefined?`<div class="bombc">${g.bomb}</div>`:'')+'</div>';
   if(g.special===2) return '<div class="g"><div class="cube"></div></div>';
   const [,,dark,shape,hx,hy]=GEMS[g.color];
   return `<div class="g"><svg viewBox="0 0 100 100"><g fill="url(#g${g.color})" stroke="${dark}" stroke-width="3" stroke-linejoin="round">${shape}</g>`+
@@ -434,14 +550,31 @@ function gemHTML(g){
     (g.locked?LOCK:'')+(g.bomb!==undefined?`<div class="bombc">${g.bomb}</div>`:'')+'</div>';
 }
 function gemClass(g){
-  return 'gem'+(SPECIAL_CLASS[g.special]||'')+(isTile(g)||g.ing?' dirtg':'')+(g.fly?' flyg':'')+(g.locked?' locked':'')+(g.armed?' armed':'')+
+  return 'gem'+(SPECIAL_CLASS[g.special]||'')+(isTile(g)||g.ing?' dirtg':'')+(g.fly?' flyg':'')+(g.locked?' locked':'')+(g.armed?' armed':'')+(mode==='saga'&&g.special===2?' cbomb':'')+
     (g.bomb!==undefined?(g.bomb<=3?' bomb danger':' bomb'):'');
 }
-function setPos(el,r,c){el.style.transform=`translate(${c*100}%,${r*100}%)`}
+// Timers back up the transition/animation events, which browsers can skip
+function landEl(el){
+  if(!el._land) return;
+  el._land=false;clearTimeout(el._lt);
+  el.classList.remove('falling','land');el.offsetWidth;el.classList.add('land');
+  setTimeout(()=>el.classList.remove('land'),320);
+}
+// In Candy Saga a candy that drops wobbles on the way down and squashes when it lands
+function setPos(el,r,c){
+  if(mode==='saga'&&el._r!==undefined&&r>el._r&&!boardEl.classList.contains('swapping')&&!boardEl.classList.contains('noanim')){
+    el._land=true;el.classList.add('falling');el.style.setProperty('--rot',(Math.random()*14-7).toFixed(1)+'deg');
+    clearTimeout(el._lt);el._lt=setTimeout(()=>landEl(el),700);
+  }
+  el._r=r;
+  el.style.transform=`translate(${c*100}%,${r*100}%)`;
+}
 function makeEl(g,r,c){
   const el=document.createElement('div');
   el.className=gemClass(g);
   el.innerHTML=gemHTML(g);
+  el.addEventListener('transitionend',e=>{if(e.target===el) landEl(el)});
+  el.addEventListener('animationend',e=>{if(e.animationName==='sqh'||e.animationName==='sqv') el.classList.remove('sqh','sqv')});
   setPos(el,r,c);
   boardEl.appendChild(el);
   els.set(g.id,el);
@@ -527,7 +660,7 @@ function placeLocks(n){
 }
 
 // ---------- effects ----------
-let parts=[],rings=[],bolts=[],fxRunning=false,lastT=0;
+let parts=[],rings=[],bolts=[],beams=[],fxRunning=false,lastT=0;
 function resizeCanvas(){
   const d=devicePixelRatio||1;cv.width=wrapEl.clientWidth*d;cv.height=wrapEl.clientHeight*d;ctx.setTransform(d,0,0,d,0,0);
   boardEl.style.setProperty('--cell',wrapEl.clientWidth/N+'px');
@@ -550,16 +683,52 @@ function fire(k,big){
   ring(k,cellSize()*(big?4.5:2),'#ffb347',big?650:450);
   if(big) ring(k,cellSize()*7,'#e599f7',800);
 }
+// Candy Saga effects: candy shards, glowing striped beams, wrapped double blasts, colored screen flash
+function candyBurst(k,color,light){
+  const [x,y]=cxy(k),s=cellSize();
+  for(let i=0;i<(light?4:8);i++){const a=Math.random()*6.28,v=.12+Math.random()*.22;
+    parts.push({x,y,vx:Math.cos(a)*v,vy:Math.sin(a)*v-.12,life:0,max:500+Math.random()*300,color:Math.random()<.25?'#fff':color,
+      rect:true,w:s*(.1+Math.random()*.1),h:s*(.06+Math.random()*.06),rot:Math.random()*6,vr:(Math.random()-.5)*.03,grav:.0011})}
+  for(let i=0;i<(light?3:6);i++){const a=Math.random()*6.28,v=.05+Math.random()*.12;
+    parts.push({x,y,vx:Math.cos(a)*v,vy:Math.sin(a)*v,life:0,max:400+Math.random()*400,color:'#fff',size:1.5+Math.random()*2,grav:0})}
+  kick();
+}
+function wrappedBurst(k,color,second){
+  const s=cellSize(),big=second?1.4:1,[x,y]=cxy(k);
+  ring(k,s*1.9*big,'#ffffff',420);ring(k,s*2.4*big,color,560);
+  for(let i=0;i<(second?3:2);i++) candyBurst(k,color,false);
+  for(let i=0;i<14;i++){const a=Math.random()*6.28,v=.03+Math.random()*.09;
+    parts.push({x:x+Math.cos(a)*s,y:y+Math.sin(a)*s,vx:Math.cos(a)*v,vy:Math.sin(a)*v,life:0,max:700+Math.random()*400,color:Math.random()<.5?'#fff':color,size:1.5+Math.random()*2.5,grav:0})}
+  flash(color,second?.35:.22);
+  if(second) shake();
+}
+function beam(k,horizontal,color){const [x,y]=cxy(k);beams.push({x,y,h:horizontal,color,life:0,max:520});kick()}
+function jellyShatter(k){
+  const [x,y]=cxy(k),s=cellSize();
+  for(let i=0;i<7;i++){const a=Math.random()*6.28,v=.06+Math.random()*.14;
+    parts.push({x,y,vx:Math.cos(a)*v,vy:Math.sin(a)*v-.06,life:0,max:450+Math.random()*250,color:i%2?'#ff8cc6':'#ffd6ec',rect:true,w:s*.16,h:s*.1,rot:Math.random()*6,vr:(Math.random()-.5)*.02,grav:.0009})}
+  kick();
+}
+function flash(color,a){
+  const f=$('#flash');
+  f.style.background=`radial-gradient(circle,${color},transparent 75%)`;f.style.setProperty('--a',a);
+  f.classList.remove('on');f.offsetWidth;f.classList.add('on');
+}
 function bolt(x1,y1,x2,y2,color='#cfe8ff',max=380){bolts.push({x1,y1,x2,y2,color,life:0,max});kick()}
 function rowBolt(r){if(r<0||r>=N) return;const s=cellSize(),y=(r+.5)*s;bolt(0,y,N*s,y)}
 function colBolt(c){if(c<0||c>=N) return;const s=cellSize(),x=(c+.5)*s;bolt(x,0,x,N*s)}
 function fxFrame(t){
   const dt=lastT?Math.min(50,t-lastT):16;lastT=t;
   ctx.clearRect(0,0,cv.width,cv.height);
-  ctx.globalCompositeOperation='lighter';
   parts=parts.filter(p=>(p.life+=dt)<p.max);
-  for(const p of parts){
-    p.vy+=p.grav*dt;p.x+=p.vx*dt;p.y+=p.vy*dt;
+  for(const p of parts){p.vy+=p.grav*dt;p.x+=p.vx*dt;p.y+=p.vy*dt}
+  for(const p of parts) if(p.rect){
+    p.rot+=p.vr*dt;
+    ctx.globalAlpha=1-p.life/p.max;ctx.fillStyle=p.color;
+    ctx.save();ctx.translate(p.x,p.y);ctx.rotate(p.rot);ctx.fillRect(-p.w/2,-p.h/2,p.w,p.h);ctx.restore();
+  }
+  ctx.globalCompositeOperation='lighter';
+  for(const p of parts) if(!p.rect){
     const a=1-p.life/p.max;
     ctx.globalAlpha=a;ctx.fillStyle=p.color;ctx.beginPath();ctx.arc(p.x,p.y,p.size*(.4+a*.6),0,6.28);ctx.fill();
   }
@@ -578,8 +747,20 @@ function fxFrame(t){
     ctx.globalAlpha=a*.5;ctx.strokeStyle=b.color;ctx.lineWidth=9;ctx.stroke();
     ctx.globalAlpha=a;ctx.strokeStyle='#fff';ctx.lineWidth=2.5;ctx.stroke();
   }
+  beams=beams.filter(b=>(b.life+=dt)<b.max);
+  const s=cellSize();
+  for(const b of beams){
+    const grow=Math.min(1,b.life/170),fade=b.life<170?1:1-(b.life-170)/(b.max-170),ext=grow*N*s;
+    const [x1,y1,x2,y2]=b.h?[b.x-ext,b.y,b.x+ext,b.y]:[b.x,b.y-ext,b.x,b.y+ext];
+    ctx.lineCap='round';
+    for(const [w,c,al] of [[s*.7,b.color,.3],[s*.3,'#fff',.32],[s*.1,'#fff',.9]]){
+      ctx.globalAlpha=al*fade;ctx.strokeStyle=c;ctx.lineWidth=w;ctx.beginPath();ctx.moveTo(x1,y1);ctx.lineTo(x2,y2);ctx.stroke();
+    }
+    if(grow<1) for(const [tx,ty] of [[x1,y1],[x2,y2]])
+      parts.push({x:tx,y:ty,vx:(Math.random()-.5)*.08,vy:(Math.random()-.5)*.08,life:0,max:350+Math.random()*250,color:Math.random()<.5?'#fff':b.color,size:1.5+Math.random()*2,grav:0});
+  }
   ctx.globalAlpha=1;ctx.globalCompositeOperation='source-over';
-  if(parts.length||rings.length||bolts.length) requestAnimationFrame(fxFrame);
+  if(parts.length||rings.length||bolts.length||beams.length) requestAnimationFrame(fxFrame);
   else{fxRunning=false;ctx.clearRect(0,0,cv.width,cv.height)}
 }
 function cellCenterPct(k){return [((k%N)+.5)/N*100,((k/N|0)+.5)/N*100]}
@@ -620,7 +801,7 @@ function renderLayers(){
   const box=$('#cells');
   if(!box.children.length) box.innerHTML=cellKeys().map(k=>`<div class="cell" style="left:${k%N*12.5}%;top:${(k/N|0)*12.5}%"></div>`).join('');
   const jel=mode==='saga'?extra.jelly:null;
-  [...box.children].forEach((d,k)=>d.className='cell'+(holes.has(k)?' hole':jel&&jel[k]?' j'+Math.min(2,jel[k]):''));
+  [...box.children].forEach((d,k)=>d.className='cell'+(holes.has(k)?' hole':(jel?' tile':'')+(jel&&jel[k]?' j'+Math.min(2,jel[k]):'')));
 }
 
 // ---------- game flow ----------
@@ -679,6 +860,12 @@ function specialCombo(a,b,ga,gb){
     fxFn=()=>{rowBolt(a/N|0);colBolt(a%N);rowBolt(r);colBolt(c);play('zap')}}
   else{for(let d=-2;d<=2;d++){addRow(r+d);addCol(c+d)}name='Supernova Combo!';
     fxFn=()=>{fire(b,true);for(let d=-2;d<=2;d++){rowBolt(r+d);colBolt(c+d)}play('nova');shake()}}
+  if(mode==='saga'){
+    const ca=colorOf(ga),cb=colorOf(gb);
+    if(t==='11') fxFn=()=>{wrappedBurst(a,ca,true);wrappedBurst(b,cb,true);play('nova')};
+    else if(t==='13') fxFn=()=>{for(let d=-1;d<=1;d++){if(r+d>=0&&r+d<N) beam((r+d)*N+c,true,ca);if(c+d>=0&&c+d<N) beam(r*N+c+d,false,cb)}wrappedBurst(b,cb,false);play('zap');play('boom')};
+    else if(t==='33') fxFn=()=>{beam(a,true,ca);beam(a,false,ca);beam(b,true,cb);beam(b,false,cb);play('zap')};
+  }
   ga.done=gb.done=true;
   return {preset:[...cells],fx:()=>{toast(name);fxFn()}};
 }
@@ -691,10 +878,18 @@ async function applySwap(a,b,force){
     if(g1.locked||g2.locked) toast('Locked! Match it to free it','small');
     return null;
   }
-  swapK(a,b);sync();play('swap');await wait(130);
+  // Candy Saga: elastic slide with a squash in the direction of travel
+  const sq=mode==='saga'?(Math.abs(a-b)===1?'sqh':'sqv'):null;
+  const squash=()=>{
+    if(!sq) return;
+    boardEl.classList.add('swapping');
+    for(const g of [at(a),at(b)]){const el=els.get(g.id);el.classList.remove('sqh','sqv');el.offsetWidth;el.classList.add(sq)}
+    setTimeout(()=>boardEl.classList.remove('swapping'),200);
+  };
+  swapK(a,b);squash();sync();play('swap');await wait(sq?190:130);
   const ga=at(b),gb=at(a);
   let preset=null,comboFx=null;
-  if(ga.special===2&&gb.special===2){preset=cellKeys();badge('annihilate');toast(mode==='saga'?'DOUBLE COLOR BOMB!':'ANNIHILATOR!');shake()}
+  if(ga.special===2&&gb.special===2){preset=cellKeys();badge('annihilate');toast(mode==='saga'?'DOUBLE COLOR BOMB!':'ANNIHILATOR!');shake();if(mode==='saga') flash('#ffffff',.9)}
   else if(ga.special===2||gb.special===2){
     const cubeK=ga.special===2?b:a,otherK=cubeK===b?a:b,cube=at(cubeK),other=at(otherK);
     if(isBlast(other)){
@@ -707,6 +902,7 @@ async function applySwap(a,b,force){
         targets.push(k);
       }
       cube.done=true;sync();
+      targets.forEach(k=>{const el=els.get(at(k).id);el.classList.add('spawn');el.addEventListener('animationend',()=>el.classList.remove('spawn'),{once:true})});
       await cubeFx([{k:cubeK,targets}]);
       preset=[cubeK,...targets];badge('combo');
       comboFx=()=>toast('Special Storm!');
@@ -716,9 +912,9 @@ async function applySwap(a,b,force){
   if(!preset&&!force){
     const m=findMatches();
     if(!m.cells.has(a)&&!m.cells.has(b)){
-      swapK(a,b);sync();play('bad');
+      swapK(a,b);squash();sync();play(sq?'pop':'bad');
       if(!replay) chain=0;
-      await wait(130);return null;
+      await wait(sq?190:130);return null;
     }
   }
   if(!force) registerMove();
@@ -828,6 +1024,7 @@ async function cascade(preset,swapPos,firstFx){
     if(firstFx){firstFx();firstFx=null}
     const ks=[...clear];
     let bonus=0,tilePts=0,jellyHit=false;
+    const jellyCells=[];
     const destroyed=[];
     for(const k of ks){
       const g=at(k);
@@ -835,7 +1032,7 @@ async function cascade(preset,swapPos,firstFx){
       if(g.fly) bonus+=250;
       if(g.locked) badge('unlock');
       if(saga&&!replay){
-        if(extra.jelly[k]>0){extra.jelly[k]--;bonus+=100;jellyHit=true;sparkle(k,'#ff8cc6',5)}
+        if(extra.jelly[k]>0){extra.jelly[k]--;bonus+=100;jellyHit=true;jellyCells.push(k);jellyShatter(k)}
         if(g.color>=0) extra.prog.colors[g.color]=(extra.prog.colors[g.color]||0)+1;
       }
     }
@@ -852,7 +1049,10 @@ async function cascade(preset,swapPos,firstFx){
       }else refreshEl(g);
       sparkle(k,col,6);
     }
-    if(jellyHit) renderLayers();
+    if(jellyHit){
+      renderLayers();
+      for(const k of jellyCells){const el=$('#cells').children[k];el.classList.add('crack');setTimeout(()=>el.classList.remove('crack'),320)}
+    }
     const mult=curMult();
     const pts=(clear.size*10*step+creations.length*50+bonus+tilePts)*mult;
     addPoints(pts);movePts+=pts;
@@ -868,19 +1068,33 @@ async function cascade(preset,swapPos,firstFx){
     if(step>1){toast(step>=5?`Incredible x${step}!`:step>=3?`Cascade x${step}!`:`Combo x${step}`,'small');addIgnition(5)}
     if(step>=5) badge('cascade5');
     if(ks.length) play('match',step+mult-1);
-    booms.forEach(k=>{fire(k,false);fx('boom',k)});
+    booms.forEach(k=>{if(saga){const g=at(k);wrappedBurst(k,colorOf(g),!!g.done)}else{fire(k,false);fx('boom',k)}});
     if(booms.length) play('boom');
     novas.forEach(k=>{fire(k,true);const r=k/N|0,c=k%N;for(let d=-1;d<=1;d++){rowBolt(r+d);colBolt(c+d)}});
     if(novas.length){play('nova');shake()}
     stars.forEach(k=>{rowBolt(k/N|0);colBolt(k%N)});
-    stripes.forEach(k=>at(k).special===7?rowBolt(k/N|0):colBolt(k%N));
+    stripes.forEach(k=>saga?beam(k,at(k).special===7,colorOf(at(k))):at(k).special===7?rowBolt(k/N|0):colBolt(k%N));
     if(stars.length||stripes.length) play('zap');
     if(prisms.length){toast('✨ Prism! Gems transformed','small');play('cube')}
-    for(const k of ks){const g=at(k);sparkle(k,colorOf(g),ks.length>20?4:8);els.get(g.id).classList.add('pop')}
+    // Candy Saga: candies flash white then burst, rippling outward from whatever special set them off
+    const origins=saga?[...stripes,...booms,...cubes.map(c=>c.k)]:[];
+    const delayOf=k=>{
+      if(!origins.length) return 0;
+      let d=1e9;for(const o of origins) d=Math.min(d,Math.hypot((o/N|0)-(k/N|0),o%N-k%N));
+      return Math.min(320,Math.round(d*34));
+    };
+    let maxD=0;
+    for(const k of ks){
+      const g=at(k),el=els.get(g.id),col=colorOf(g);
+      if(saga){const d=delayOf(k);maxD=Math.max(maxD,d);el.style.setProperty('--d',d+'ms');setTimeout(()=>candyBurst(k,col,ks.length>20),d+70)}
+      else sparkle(k,col,ks.length>20?4:8);
+      el.classList.add('pop');
+    }
     for(const k of destroyed) els.get(at(k).id)?.classList.add('pop');
+    if(saga&&ks.length) flash(colorOf(at(ks[0])),ks.length>12?.35:.15);
     if(step>=3||novas.length||ks.length>=20) pulseBg();
     updateHUD();
-    await wait(150);
+    await wait(saga?200+maxD:150);
     for(const k of [...ks,...destroyed]) board[k/N|0][k%N]=null;
     for(const cr of creations){
       placeSpecial(cr.k,{id:nextId++,color:cr.color,special:cr.special});
@@ -952,7 +1166,7 @@ function shuffleCore(){
     put();ok=!findMatches().any&&findMove();
   }
   for(let t=0;t<500&&!ok;t++){
-    for(let i=0;i<gems.length;i++) gems[i]={id:nextId++,color:Math.random()*COLORS|0,special:0};
+    for(let i=0;i<gems.length;i++) gems[i]={id:nextId++,color:Math.random()*(mode==='saga'?SAGA_COLORS:COLORS)|0,special:0};
     put();ok=!findMatches().any&&findMove();
   }
 }
@@ -1085,7 +1299,7 @@ function buildLevel(n){
   for(const kind of kinds){
     if(kind==='score'){target=800+n*200;extra.goals.push({t:'score',n:target});moves=Math.round(20-d*3)}
     else if(kind==='jelly'){const layers=d>.3&&R()<.5?2:1;for(const k of take(cellsIn(2,7),Math.round(12+d*18))) extra.jelly[k]=layers;extra.goals.push({t:'jelly'});moves+=3}
-    else if(kind==='order'){const [c1,c2]=take([0,1,2,3,4,5,6],2),amt=Math.round(12+d*18);extra.goals.push({t:'color',c:c1,n:amt},{t:'color',c:c2,n:amt})}
+    else if(kind==='order'){const [c1,c2]=take([0,1,2,3,4,5],2),amt=Math.round(12+d*18);extra.goals.push({t:'color',c:c1,n:amt},{t:'color',c:c2,n:amt})}
     else if(kind==='ing'){extra.ingNeed=2+Math.round(d);extra.goals.push({t:'ing',n:extra.ingNeed});for(const k of take(cellsIn(0,1),1)) put(k,{ing:true});moves+=5}
     else if(kind==='frost'){for(const k of take(cellsIn(5,7),Math.round(6+d*8))) put(k,{block:'frost',hp:1+(R()*(1+d*2)|0)});extra.goals.push({t:'block',kind:'frost'})}
     else if(kind==='choc'){for(const k of take(cellsIn(6,7),Math.round(3+d*3))) put(k,{block:'choc',hp:1});extra.goals.push({t:'block',kind:'choc'})}
@@ -1105,7 +1319,7 @@ function goalState(g){
   if(g.t==='score') return [Math.min(1,score/g.n),`🎯 ${Math.min(score,g.n).toLocaleString()} / ${g.n.toLocaleString()}`,`Score ${g.n.toLocaleString()} points`];
   if(g.t==='jelly'){const l=jellyLeft();return [1-l/(extra.init.jelly||1),`🟪 ${l} left`,'Clear all the pink jelly by matching on top of it']}
   if(g.t==='ing') return [extra.prog.ing/g.n,`🌰 ${extra.prog.ing} / ${g.n}`,`Bring ${g.n} 🌰 down to the bottom`];
-  if(g.t==='color'){const have=Math.min(g.n,extra.prog.colors[g.c]||0),dot=`<span class="dot" style="background:${GEMS[g.c][1]}"></span>`;
+  if(g.t==='color'){const have=Math.min(g.n,extra.prog.colors[g.c]||0),dot=`<span class="dot" style="background:${CANDY[g.c][1]}"></span>`;
     return [have/g.n,`${dot} ${have} / ${g.n}`,`${dot} Collect ${g.n} of this color`]}
   const l=blocksLeft(g.kind);
   return [1-l/(extra.init[g.kind]||1),`${BLOCK_ICON[g.kind]} ${l} left`,`${BLOCK_ICON[g.kind]} Clear all the ${BLOCK_NAME[g.kind]}`+(g.kind==='choc'?' (it spreads if you don\'t!)':'')];
@@ -1516,6 +1730,7 @@ function play(type,level=1){
   };
   if(type==='swap') tone(520,.08,0,'triangle',.07);
   else if(type==='bad') tone(170,.15,0,'square',.04);
+  else if(type==='pop') tone(700,.08,0,'sine',.08,380);
   else if(type==='match'){const f=392*Math.pow(2,Math.min(level-1,14)*2/12);tone(f,.16);tone(f*1.25,.18,.04);tone(f*1.5,.22,.08)}
   else if(type==='boom'){noise(.4,.35,900);tone(110,.3,0,'sine',.15,40)}
   else if(type==='nova'){noise(.8,.5,600);tone(80,.7,0,'sine',.2,30);tone(700,.5,0,'sawtooth',.04,90)}
