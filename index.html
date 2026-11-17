@@ -35,6 +35,7 @@ body.pulse::before{filter:brightness(2) saturate(1.5)}
 #fire{position:fixed;left:0;right:0;bottom:0;height:35vh;pointer-events:none;opacity:0;transition:opacity .5s;z-index:5;
   background:linear-gradient(to top,rgba(255,80,0,.55),rgba(255,160,0,.18) 50%,transparent);animation:flicker .25s infinite alternate}
 body.blazing #fire{opacity:1}
+body:not(.blazing) #fire{animation:none}
 body.blazing #board{box-shadow:inset 0 0 0 2px #ffb347,0 0 30px #ff7b00}
 @keyframes flicker{to{transform:scaleY(1.08);filter:brightness(1.2)}}
 #app{width:min(calc(100vw - 16px),calc(100dvh - 265px),520px);display:flex;flex-direction:column;gap:8px;margin:auto 0}
@@ -163,6 +164,9 @@ body.saga .saga-only{display:block}
 body.saga .no-saga{display:none}
 .modal{position:fixed;inset:0;background:rgba(0,0,0,.6);display:none;align-items:center;justify-content:center;padding:16px;z-index:10}
 .modal.open{display:flex}
+#nudge{position:fixed;left:50%;bottom:12px;transform:translateX(-50%);width:min(360px,calc(100% - 24px));z-index:11;display:none;flex-direction:column;gap:8px;
+  background:hsl(var(--hue) 40% 18%);border-radius:14px;padding:12px;box-shadow:0 6px 24px rgba(0,0,0,.5);font-size:13px}
+#nudge.open{display:flex}
 .card{background:hsl(var(--hue) 40% 18%);border-radius:16px;padding:18px;width:min(360px,100%);max-height:90dvh;overflow:auto;display:flex;flex-direction:column;gap:10px}
 .card h2{margin:0 0 4px;font-size:20px;text-align:center}
 .card h3{margin:6px 0 0;font-size:13px;opacity:.7;text-transform:uppercase;letter-spacing:.1em}
@@ -264,6 +268,10 @@ body.saga .float{animation:riseB 1.05s ease-out forwards}
   <p id="menuTip">Saves automatically. 💥 Detonator blows up every special gem; earn one each level.</p>
   <button class="close">Close</button>
 </div></div>
+<div id="nudge"><b>💾 Keep your progress safe</b>
+  <span>Safari can erase game data after 7 days away, and the Home Screen app keeps separate saves from Safari. A backup code lets you get it all back.</span>
+  <div class="btns"><button id="nudgeCopy">📋 Copy backup code</button><button id="nudgeLater">Not now</button></div>
+</div>
 <div class="modal" id="badges"><div class="card">
   <h2>Badges</h2>
   <div id="badgeList" style="display:flex;flex-direction:column;gap:6px"></div>
@@ -347,6 +355,7 @@ const isBlast=g=>g&&[1,3,4,7,8,9].includes(g.special);
 const isTile=g=>g&&(g.dirt||g.block);
 const movable=g=>g&&!g.locked&&!g.dirt&&!g.block;
 const PERSIST={classic:1,zen:1,mine:1,saga:1};
+const own=(o,k)=>Object.prototype.hasOwnProperty.call(o,k);
 const MODES=[
   ['saga','🍬 Candy Saga','Levels with goals, blockers and limited moves'],
   ['classic','🏆 Classic','Levels with bombs and locked gems'],
@@ -497,7 +506,7 @@ let sagaMeta={unlocked:1,cur:1,stars:{}}, armedTool=null, chocHit=false, failKin
 let timeLeft=0, extraUsed=false, runOver=false, overMsg='', bonusMult=0;
 let iceH=[], iceSpeed=[], iceT=0, flyMoves=0;
 let busy=false, selected=null, hintTimer=null, hinted=[], hintReadyAt=0;
-let pending=null, chain=0, lastMatchAt=0, ignition=0, blazeUntil=0, moveBlazing=false;
+let pending=null, queued=0, chain=0, lastMatchAt=0, ignition=0, blazeUntil=0, moveBlazing=false;
 let rec=null, replay=null, replayRec=null;
 const els=new Map();
 
@@ -537,17 +546,17 @@ const menuOpen=()=>!!document.querySelector('.modal.open');
 
 function gemHTML(g){
   if(g.dirt) return `<div class="g"><div class="dirt d${Math.min(3,g.dirt)}">${g.treasure==='d'?'💎':g.treasure==='g'?'🪙':''}</div></div>`;
-  if(g.block==='frost') return `<div class="g"><div class="blk frost f${Math.min(3,g.hp)}">${g.hp>1?g.hp:''}</div></div>`;
-  if(g.block) return `<div class="g"><div class="blk ${g.block}"></div></div>`;
+  if(g.block==='frost') return `<div class="g"><div class="blk frost f${Math.min(3,g.hp|0)}">${g.hp>1?g.hp|0:''}</div></div>`;
+  if(g.block) return `<div class="g"><div class="blk ${own(BLOCK_NAME,g.block)?g.block:''}"></div></div>`;
   if(g.ing) return '<div class="g"><div class="ingr">🌰</div></div>';
-  if(mode==='saga') return '<div class="g">'+candySVG(g)+(g.locked?LOCK:'')+(g.bomb!==undefined?`<div class="bombc">${g.bomb}</div>`:'')+'</div>';
+  if(mode==='saga') return '<div class="g">'+candySVG(g)+(g.locked?LOCK:'')+(g.bomb!==undefined?`<div class="bombc">${g.bomb|0}</div>`:'')+'</div>';
   if(g.special===2) return '<div class="g"><div class="cube"></div></div>';
   const [,,dark,shape,hx,hy]=GEMS[g.color];
   return `<div class="g"><svg viewBox="0 0 100 100"><g fill="url(#g${g.color})" stroke="${dark}" stroke-width="3" stroke-linejoin="round">${shape}</g>`+
     `<g fill="#fff" opacity=".2" transform="translate(50 52) scale(.5) translate(-50 -50)">${shape}</g>`+
     `<ellipse cx="${hx}" cy="${hy}" rx="10" ry="5.5" fill="#fff" opacity=".65" transform="rotate(-30 ${hx} ${hy})"/></svg>`+
     (OVERLAY[g.special]||'')+(g.time?'<div class="tm">+5</div>':'')+(g.fly?'<div class="flyo">🦋</div>':'')+
-    (g.locked?LOCK:'')+(g.bomb!==undefined?`<div class="bombc">${g.bomb}</div>`:'')+'</div>';
+    (g.locked?LOCK:'')+(g.bomb!==undefined?`<div class="bombc">${g.bomb|0}</div>`:'')+'</div>';
 }
 function gemClass(g){
   return 'gem'+(SPECIAL_CLASS[g.special]||'')+(isTile(g)||g.ing?' dirtg':'')+(g.fly?' flyg':'')+(g.locked?' locked':'')+(g.armed?' armed':'')+(mode==='saga'&&g.special===2?' cbomb':'')+
@@ -631,7 +640,7 @@ function findMove(){
     const k2=k+d;if(k2>=N*N) continue;
     const g1=at(k),g2=at(k2);
     if(!movable(g1)||!movable(g2)) continue;
-    if(g1.special===2||g2.special===2||(isBlast(g1)&&isBlast(g2))) return [k,k2];
+    if((g1.special===2&&!g2.ing)||(g2.special===2&&!g1.ing)||(isBlast(g1)&&isBlast(g2))) return [k,k2];
     swapK(k,k2);const ok=findMatches().any;swapK(k,k2);
     if(ok) return [k,k2];
   }
@@ -839,7 +848,7 @@ function badge(id){
   if(replay||badges[id]) return;
   badges[id]=Date.now();
   const b=BADGES.find(b=>b[0]===id);
-  toast('🏆 Badge: '+b[1],'badge');play('badge');
+  toast('🏆 Badge: '+b[1],'badge');play('badge');backupNudge();
 }
 function gainDetonator(){if((boosts.det||0)<9){boosts.det=(boosts.det||0)+1;toast('+1 💥 Detonator','badge')}}
 
@@ -906,7 +915,7 @@ async function applySwap(a,b,force){
       await cubeFx([{k:cubeK,targets}]);
       preset=[cubeK,...targets];badge('combo');
       comboFx=()=>toast('Special Storm!');
-    }else{cube.target=other.color;preset=[cubeK]}
+    }else if(!other.ing){cube.target=other.color;preset=[cubeK]} // an ingredient has no colour: not a valid swap
   }
   else if(isBlast(ga)&&isBlast(gb)){({preset,fx:comboFx}=specialCombo(a,b,ga,gb));badge('combo')}
   if(!preset&&!force){
@@ -922,9 +931,9 @@ async function applySwap(a,b,force){
 }
 async function takePending(){
   const [a,b]=pending;pending=null;select(null);
-  if(mode==='saga'&&extra.moves<=0) return null;
+  if(runOver||(mode==='saga'&&extra.moves<=0)) return null;
   const r=await applySwap(a,b);
-  if(r){badge('quick');if(rec) rec.invalid=true}
+  if(r){badge('quick');queued++;if(rec) rec.invalid=true}
   return r;
 }
 
@@ -999,7 +1008,7 @@ async function cascade(preset,swapPos,firstFx){
         let col=g.special===5?g.color:g.target;
         if(col===undefined){const left=board.flat().filter((x,j)=>x&&!clear.has(j)&&x.color>=0&&x.special!==2&&!isTile(x));col=left.length?left[rnd()*left.length|0].color:0}
         const targets=[];
-        for(let j=0;j<N*N;j++) if(at(j)?.color===col){targets.push(j);add(j)}
+        for(let j=0;j<N*N;j++){const x=at(j);if(x&&x.color===col&&!isTile(x)&&!x.ing&&x.special!==2){targets.push(j);add(j)}}
         cubes.push({k,targets});
         if(g.special===5) badge('fruit');
       }else if(g.special===6){g.done=true;prisms.push(k);badge('prism')}
@@ -1169,6 +1178,26 @@ function shuffleCore(){
     for(let i=0;i<gems.length;i++) gems[i]={id:nextId++,color:Math.random()*(mode==='saga'?SAGA_COLORS:COLORS)|0,special:0};
     put();ok=!findMatches().any&&findMove();
   }
+  if(ok) return true;
+  // Last resort so the board is never left without a move: put a Color Bomb next to a free gem,
+  // clearing a blocker, lock or dirt beside it if nothing else is free
+  const isFree=g=>movable(g)&&!g.ing,plain=g=>isFree(g)&&!g.special&&!g.fly&&g.bomb===undefined;
+  const pairs=[];
+  for(let k=0;k<N*N;k++) for(const d of [-1,1,-N,N]){
+    const k2=k+d;
+    if(k2<0||k2>=N*N||(Math.abs(d)===1&&(k2/N|0)!==(k/N|0))) continue;
+    if(at(k)&&at(k2)&&!at(k).ing&&!at(k2).ing) pairs.push([k,k2]);
+  }
+  const p=pairs.find(([a,b])=>plain(at(a))&&isFree(at(b)))||pairs.find(([a])=>plain(at(a)))||pairs[0];
+  if(!p) return false;
+  const [a,b]=p;
+  board[a/N|0][a%N]={id:nextId++,color:-1,special:2};
+  if(!isFree(at(b))){
+    const g={id:nextId++,color:0,special:0};board[b/N|0][b%N]=g;
+    for(let c=0;c<(mode==='saga'?SAGA_COLORS:COLORS);c++){g.color=c;if(!findMatches().any) break}
+  }
+  toast(mode==='saga'?'Here’s a Color Bomb to keep you going!':'Here’s a Hypercube to keep you going!','small');
+  return true;
 }
 async function shuffle(){shuffleCore();sync();play('shuffle');await wait(400)}
 const snapshot=()=>board.map(row=>row.map(g=>g&&strip(g)));
@@ -1188,7 +1217,7 @@ async function trySwap(a,b){
   const R=rec;rec=null;
   if(mode!=='saga'&&!R.invalid&&(res.steps>=4||res.pts>=4000)) offerReplay(R);
   if(res.pts>=5000) badge('bigmove');
-  await afterMove(force);
+  await afterMoves(force);
   busy=false;
   if(runOver) return;
   if(pending){const [p1,p2]=pending;pending=null;trySwap(p1,p2)}
@@ -1206,6 +1235,13 @@ async function afterMove(isBoost){
   if(mode==='fly') markFlies();
   if(!runOver&&!findMove()){toast('No moves — mixing!','small');await wait(700);await shuffle()}
   save();armHint();
+}
+// Moves made while gems were still falling ran inside the cascade; each one still gets its own
+// end-of-move rules (bomb ticks, chocolate, saga checks, butterflies)
+async function afterMoves(isBoost){
+  await afterMove(isBoost);
+  while(queued>0&&!runOver){queued--;await afterMove(false)}
+  queued=0;
 }
 
 // ---------- bombs ----------
@@ -1255,7 +1291,7 @@ const need=l=>1000+(l-1)*500;
 function checkLevel(){
   let up=false;
   while(score-levelStart>=need(level)){levelStart+=need(level);level++;up=true}
-  if(up){toast(`Level ${level}!`);play('level');setHue();pulseBg();gainDetonator()}
+  if(up){toast(`Level ${level}!`);play('level');setHue();pulseBg();gainDetonator();backupNudge()}
   if(mode==='classic'){if(level>=5) badge('lvl5');if(level>=10) badge('lvl10');if(level>=25) badge('lvl25')}
   if(mode==='zen'&&level>=10) badge('zen');
   return up;
@@ -1399,7 +1435,7 @@ function sagaWin(){
   $('#winScore').textContent=score.toLocaleString();
   $('#winReward').textContent='Reward: '+rewards.join(', ');
   play('level');pulseBg();
-  $('#win').classList.add('open');
+  $('#win').classList.add('open');backupNudge();
 }
 function sagaFail(msg,kind){
   runOver=true;failKind=kind;sagaMeta.cur=extra.n;
@@ -1457,7 +1493,7 @@ function setTool(t){
 async function boostCascade(cells){
   busy=true;stopHint();select(null);chocHit=true;
   await cascade(cells,null);
-  await afterMove(true);
+  await afterMoves(true);
   busy=false;
 }
 async function useHammer(k){
@@ -1513,7 +1549,7 @@ function markFlies(){for(let k=0;k<N*N;k++){const g=at(k);if(g&&g.fly) els.get(g
 
 // ---------- modes ----------
 function resetRun(){
-  chain=0;ignition=0;blazeUntil=0;bonusMult=0;pending=null;replayRec=null;runOver=false;
+  chain=0;ignition=0;blazeUntil=0;bonusMult=0;pending=null;queued=0;replayRec=null;runOver=false;
   hideReplay();document.body.classList.remove('blazing');
 }
 function freshGame(m){
@@ -1532,7 +1568,7 @@ function enterMode(m){
   mode=m;resetRun();stopHint();selected=null;closeModals();setTool(null);
   holes=new Set();
   document.body.classList.toggle('saga',m==='saga');
-  const s=PERSIST[m]&&slots[m];
+  const s=own(PERSIST,m)&&own(slots,m)&&slots[m];
   if(s&&Array.isArray(s.board)&&s.board.length===N){
     board=s.board.map(r=>r.map(deser));({score,level,levelStart}=s);extra=s.extra||{};
     if(m==='saga') holes=holesFor(extra.n);
@@ -1650,23 +1686,139 @@ function stateJSON(){
   if(PERSIST[mode]&&!(mode==='saga'&&runOver)) slots[mode]=liveSlot();
   return JSON.stringify({v:2,mode:lastPersistent,slots,bests,soundOn,badges,boosts,saga:sagaMeta});
 }
-// Accepts the current format and the original single-game save
-function readState(s){
-  if(s&&s.v===1&&Array.isArray(s.board)) s={v:2,mode:'classic',slots:{classic:{board:s.board,score:s.score,level:s.level,levelStart:s.levelStart}},
+// Everything read from storage or a backup code goes through cleanState first. Only known keys,
+// whitelisted strings and range-checked numbers survive, so nothing in a save can reach innerHTML as markup.
+// strict (backup codes): any bad part rejects the whole code.
+// lenient (this device's own save): a bad part falls back to its default and is counted in .dropped.
+const SAGA_MAX=10000, SAVE_KEY=/^[a-z][a-z0-9]{0,23}$/;
+const isObj=o=>!!o&&typeof o==='object'&&!Array.isArray(o);
+const isInt=(v,lo,hi)=>Number.isInteger(v)&&v>=lo&&v<=hi;
+const isNum=(v,lo,hi)=>typeof v==='number'&&Number.isFinite(v)&&v>=lo&&v<=hi;
+function bad(why){throw new Error('bad save: '+why)}
+const optInt=(v,lo,hi,def,why)=>v===undefined?def:isInt(v,lo,hi)?v:bad(why);
+const optNum=(v,lo,hi,def,why)=>v===undefined?def:isNum(v,lo,hi)?v:bad(why);
+function cleanCell(a){
+  if(a===0||a===null) return 0;
+  if(!Array.isArray(a)||a.length<2||a.length>3) bad('cell');
+  const [color,special,x={}]=a;
+  if(!isInt(color,-1,COLORS-1)||!isInt(special,0,9)||!isObj(x)) bad('cell');
+  const o={};
+  if(x.b!==undefined){if(!isInt(x.b,-9,99)) bad('bomb');o.b=x.b}
+  if(x.l) o.l=1;
+  if(x.d){if(!isInt(x.d,1,9)) bad('dirt');o.d=x.d;if(x.t){if(x.t!=='d'&&x.t!=='g') bad('treasure');o.t=x.t}}
+  if(x.k){if(!own(BLOCK_NAME,x.k)||!isInt(x.h,0,9)) bad('block');o.k=x.k;o.h=x.h}
+  if(x.i) o.i=1;
+  if(x.f) o.f=1;
+  if(color<0&&special!==2&&!o.d&&!o.k&&!o.i) bad('colourless gem'); // would crash the renderer
+  return Object.keys(o).length?[color,special,o]:[color,special];
+}
+function cleanBoard(b){
+  if(!Array.isArray(b)||b.length!==N) bad('board');
+  return b.map(r=>{if(!Array.isArray(r)||r.length!==N) bad('board row');return r.map(cleanCell)});
+}
+function cleanGoal(g){
+  if(!isObj(g)) bad('goal');
+  if(g.t==='score'||g.t==='ing') return {t:g.t,n:isInt(g.n,1,1e9)?g.n:bad('goal')};
+  if(g.t==='jelly') return {t:'jelly'};
+  if(g.t==='color'&&isInt(g.c,0,COLORS-1)&&isInt(g.n,1,1e6)) return {t:'color',c:g.c,n:g.n};
+  if(g.t==='block'&&own(BLOCK_NAME,g.kind)) return {t:'block',kind:g.kind};
+  bad('goal');
+}
+function cleanExtra(e,m){
+  if(m==='mine') return isObj(e)&&isInt(e.dirtMax,0,N*N)?{dirtMax:e.dirtMax}:{};
+  if(m!=='saga') return {};
+  if(!isObj(e)||!isInt(e.n,1,SAGA_MAX)||!isInt(e.moves,-99,9999)) bad('saga level');
+  if(!Array.isArray(e.jelly)||e.jelly.length!==N*N||!e.jelly.every(v=>isInt(v,0,9))) bad('jelly');
+  const p=isObj(e.prog)?e.prog:bad('progress'),colors={};
+  if(p.colors!==undefined&&!isObj(p.colors)) bad('progress');
+  for(const [k,v] of Object.entries(p.colors||{})){if(!/^\d$/.test(k)||+k>=COLORS||!isInt(v,0,1e6)) bad('progress');colors[k]=v}
+  if(!Array.isArray(e.goals)||e.goals.length>8) bad('goals');
+  const init={};
+  for(const k of ['jelly','frost','choc','lic']) init[k]=isObj(e.init)?optInt(e.init[k],0,N*N,0,'init'):0;
+  return {n:e.n,moves:e.moves,jelly:e.jelly.slice(),prog:{ing:optInt(p.ing,0,999,0,'progress'),colors},goals:e.goals.map(cleanGoal),
+    target:optNum(e.target,0,1e12,0,'target'),ingNeed:optInt(e.ingNeed,0,99,0,'ingredients'),init};
+}
+function cleanSlot(s,m){
+  if(!isObj(s)) bad('slot');
+  return {board:cleanBoard(s.board),score:optNum(s.score,-1e12,1e12,0,'score'),level:optInt(s.level,1,1e6,1,'level'),
+    levelStart:optNum(s.levelStart,-1e12,1e12,0,'levelStart'),extra:cleanExtra(s.extra,m)};
+}
+// Numeric maps (bests, badges): keep every plain key so nothing from an older version is lost.
+// Badge values are only ever tested for truthiness, so any truthy value becomes 1; bests must be numbers.
+function cleanNums(o,why,flags){
+  const out={};
+  if(o==null) return out;
+  if(!isObj(o)) bad(why);
+  for(const [k,v] of Object.entries(o)){
+    if(!SAVE_KEY.test(k)) continue;
+    if(isNum(v,0,1e15)) out[k]=v;
+    else if(flags){if(v) out[k]=1}
+    else if(v!=null) bad(why);
+  }
+  return out;
+}
+// Accepts the current format and the original single-game save (v1); returns a fresh, safe copy or null
+function cleanState(s,strict){
+  if(isObj(s)&&s.v===1&&Array.isArray(s.board)) s={v:2,mode:'classic',slots:{classic:{board:s.board,score:s.score,level:s.level,levelStart:s.levelStart}},
     bests:{classic:s.best||0,blitz:s.bestBlitz||0},soundOn:s.soundOn,badges:s.badges};
-  if(!s||s.v!==2||typeof s.slots!=='object') return false;
-  slots=s.slots;bests=s.bests||{};soundOn=s.soundOn!==false;badges=s.badges||{};
-  boosts={...DEFAULT_BOOSTS,...s.boosts};sagaMeta={unlocked:1,cur:1,stars:{},...s.saga};
-  mode=null;enterMode(PERSIST[s.mode]?s.mode:'classic');
+  if(!isObj(s)||s.v!==2||!isObj(s.slots)) return null;
+  let dropped=0;
+  const part=(fn,def)=>{try{return fn()}catch(e){if(strict) throw e;console.warn(e.message);dropped++;return def}};
+  try{
+    const slots={};
+    for(const m of Object.keys(PERSIST)) if(own(s.slots,m)&&s.slots[m]){const v=part(()=>cleanSlot(s.slots[m],m),null);if(v) slots[m]=v}
+    const bests=part(()=>cleanNums(s.bests,'bests'),{});
+    const badges=part(()=>cleanNums(s.badges,'badges',true),{});
+    const boosts={...DEFAULT_BOOSTS};
+    part(()=>{
+      if(s.boosts==null) return;
+      if(!isObj(s.boosts)) bad('boosts');
+      for(const k of Object.keys(DEFAULT_BOOSTS)) boosts[k]=optInt(s.boosts[k],0,9999,DEFAULT_BOOSTS[k],'boosts');
+    });
+    const saga=part(()=>{
+      const g=s.saga==null?{}:isObj(s.saga)?s.saga:bad('saga'),stars={};
+      if(g.stars!=null&&!isObj(g.stars)) bad('stars');
+      for(const [k,v] of Object.entries(g.stars||{})){if(!/^\d{1,5}$/.test(k)||!isInt(v,0,3)) bad('stars');stars[k]=v}
+      return {unlocked:optInt(g.unlocked,1,SAGA_MAX,1,'saga'),cur:optInt(g.cur,1,SAGA_MAX,1,'saga'),stars};
+    },{unlocked:1,cur:1,stars:{}});
+    if(strict&&s.mode!==undefined&&!own(PERSIST,s.mode)) bad('mode');
+    return {mode:own(PERSIST,s.mode)?s.mode:'classic',slots,bests,soundOn:s.soundOn!==false,badges,boosts,saga,dropped};
+  }catch(e){console.warn(e.message);return null}
+}
+// Only ever called with the output of cleanState. Throws if the state still can't be shown.
+function readState(c){
+  if(!c) return false;
+  slots=c.slots;bests=c.bests;soundOn=c.soundOn;badges=c.badges;boosts=c.boosts;sagaMeta=c.saga;
+  mode=null;enterMode(c.mode);
   return true;
 }
 function save(){
   try{localStorage.setItem(KEY,stateJSON())}catch(e){console.warn('save failed',e)}
 }
+function resetState(){
+  mode=null;slots={};bests={};badges={};boosts={...DEFAULT_BOOSTS};sagaMeta={unlocked:1,cur:1,stars:{}};soundOn=true;
+}
+// A damaged save can never stop the game from starting: the raw text is kept under its own key
+// (never deleted), then we try the progress without the boards, then the copy made before the last
+// restore, then start fresh.
 function load(){
-  let s=null;
-  try{s=JSON.parse(localStorage.getItem(KEY))}catch(e){console.warn('load failed',e)}
-  if(!readState(s)) enterMode('classic');
+  let raw=null,s=null,kept=false;
+  try{raw=localStorage.getItem(KEY)}catch(e){console.warn('load failed',e)}
+  try{s=JSON.parse(raw)}catch(e){console.warn('load failed',e)}
+  const keep=()=>{if(kept||raw==null) return;kept=true;try{localStorage.setItem(KEY+'.corrupt-'+Date.now(),raw)}catch(e){console.warn('could not keep damaged save',e)}};
+  if(raw!=null){
+    const c=cleanState(s,false);
+    if(c&&c.dropped) keep();
+    try{if(readState(c)) return}catch(e){console.warn('load failed',e)}
+    keep();
+    // the boards couldn't be shown: keep badges, bests, boosters and saga stars, start the boards fresh
+    if(c) try{resetState();if(readState({...c,slots:{}})){toast('Save was damaged, your games were restarted','small');return}}catch(e){console.warn('load failed',e)}
+  }
+  try{
+    const b=cleanState(JSON.parse(localStorage.getItem(KEY+'.bak')),false);
+    if(b){resetState();if(readState(b)){if(raw!=null) toast('Save was damaged, loaded your last backup','small');return}}
+  }catch(e){console.warn('backup load failed',e)}
+  resetState();enterMode('classic');
 }
 
 // ---------- replay ----------
@@ -1842,7 +1994,7 @@ $('#fishBtn').onclick=async()=>{
 };
 $('#menuBtn').onclick=()=>{
   $('#modeList').innerHTML=MODES.map(([id,name,desc])=>{
-    const extraTxt=id==='saga'?` · level ${sagaMeta.cur}`:bests[id]?' · best '+bests[id].toLocaleString():'';
+    const extraTxt=id==='saga'?` · level ${sagaMeta.cur|0}`:bests[id]?' · best '+Number(bests[id]).toLocaleString():'';
     return `<button class="modebtn${id===mode?' cur':''}" data-mode="${id}">${name}<small>${desc}${PERSIST[id]?' · saved':''}${extraTxt}</small></button>`}).join('');
   $('#modeList').querySelectorAll('button').forEach(b=>b.onclick=()=>{
     if(busy) return;
@@ -1874,19 +2026,48 @@ $('#badgesBtn').onclick=()=>{
     `<div class="badge-item${badges[id]?'':' locked'}"><span style="font-size:22px">${badges[id]?'🏆':'🔒'}</span><div><b>${name}</b><small>${how}</small></div></div>`).join('');
   closeModals();$('#badges').classList.add('open');
 };
+const SAFE_TIP='Safari can erase game data after 7 days away, and the Home Screen app keeps its own separate saves.';
 $('#copyBtn').onclick=async()=>{
   if(busy) return;
   const code=btoa(stateJSON());
-  try{await navigator.clipboard.writeText(code);alert('Backup code copied! Paste it somewhere safe (like Notes).')}
-  catch(e){prompt('Copy this backup code and keep it somewhere safe:',code)}
+  setMark('backupAt');$('#nudge').classList.remove('open');
+  try{await navigator.clipboard.writeText(code);alert('Backup code copied! Paste it somewhere safe (like Notes).\n\n'+SAFE_TIP)}
+  catch(e){prompt('Copy this backup code and keep it somewhere safe. '+SAFE_TIP,code)}
 };
+// Restore: validate the whole code first, ask, keep a copy of the current progress, and roll back if anything fails
 $('#restoreBtn').onclick=()=>{
   if(busy) return;
   const code=prompt('Paste your backup code:');if(!code) return;
-  let s=null;
-  try{s=JSON.parse(atob(code.trim()))}catch(e){console.warn('bad backup code',e)}
-  if(!readState(s)) return alert("That code didn't work.");
+  let c=null;
+  try{c=cleanState(JSON.parse(atob(code.trim())),true)}catch(e){console.warn('bad backup code',e)}
+  if(!c) return alert("That code didn't work. Nothing was changed.");
+  if(!confirm('Replace ALL your current progress on this device with this backup code?\n\nA copy of your current progress is kept on this device.')) return;
+  const cur=stateJSON();
+  try{localStorage.setItem(KEY+'.bak',cur)}
+  catch(e){console.warn('backup copy failed',e);if(!confirm("Couldn't keep a copy of your current progress. Restore anyway?")) return}
+  try{if(readState(c)){toast('Backup restored!','small');return}}catch(e){console.warn('restore failed',e)}
+  try{resetState();readState(cleanState(JSON.parse(cur),false))}catch(e){console.warn('rollback failed',e);load()}
+  alert("That code didn't work. Nothing was changed.");
 };
+// ---------- keeping saves safe on iPhone ----------
+// Ask the browser not to evict our storage, and nudge (gently, at most every few days) for a backup code
+// after milestones when the player hasn't made one recently.
+let storagePersisted=false;
+const DAY=864e5;
+function getMark(k){try{return +localStorage.getItem(KEY+'.'+k)||0}catch(e){return 0}}
+function setMark(k){try{localStorage.setItem(KEY+'.'+k,String(Date.now()))}catch(e){}}
+function backupNudge(){
+  if(replay||(Object.keys(badges).length<3&&sagaMeta.unlocked<3)) return; // wait until there's progress worth keeping
+  const now=Date.now();
+  if(now-getMark('backupAt')<(storagePersisted?30:7)*DAY||now-getMark('nudgeAt')<3*DAY) return;
+  setMark('nudgeAt');
+  $('#nudge').classList.add('open');
+}
+$('#nudgeCopy').onclick=()=>busy?toast('Finish this move first','small'):$('#copyBtn').onclick();
+$('#nudgeLater').onclick=()=>$('#nudge').classList.remove('open');
+const saveNow=()=>{if(!busy&&!replay) save()};
+addEventListener('pagehide',saveNow);
+document.addEventListener('visibilitychange',()=>{if(document.visibilityState==='hidden') saveNow()});
 $('#newBtn').onclick=()=>{
   if(busy) return;
   if(mode==='saga'){if(confirm(`Restart level ${extra.n}?`)) startLevel(extra.n);return}
@@ -1898,7 +2079,7 @@ $('#newBtn').onclick=()=>{
 };
 
 load();
-navigator.storage?.persist?.();
+try{navigator.storage?.persist?.()?.then(ok=>{storagePersisted=!!ok},()=>{})}catch(e){}
 </script>
 </body>
 </html>
